@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HR Portal (demo host)</title>
+    <style>
+      :root { --bg: #f8fafc; --card: #fff; --text: #0f172a; --muted: #64748b; --accent: #0f766e; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg: #0b1120; --card: #111827; --text: #e2e8f0; --muted: #94a3b8; --accent: #2dd4bf; }
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); }
+      header { background: var(--accent); color: #fff; padding: 12px 20px; font-weight: 600; }
+      nav { display: flex; gap: 8px; padding: 12px 20px; flex-wrap: wrap; }
+      nav button { border: 1px solid var(--muted); background: var(--card); color: var(--text);
+                   border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+      nav button[aria-current="page"] { border-color: var(--accent); outline: 2px solid var(--accent); }
+      main { padding: 0 20px 20px; max-width: 760px; }
+      .card { background: var(--card); border-radius: 12px; padding: 16px 20px; margin-top: 12px; }
+      .muted { color: var(--muted); font-size: 14px; }
+      code { font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <header>HR Portal <span style="font-weight: 400; opacity: 0.8">· demo host application</span></header>
+    <nav aria-label="Portal pages">
+      <button data-page="/leave" data-module="Leave" data-title="My leave">My leave</button>
+      <button data-page="/leave/requests/LR-2041" data-module="Leave" data-title="Leave request LR-2041"
+              data-record-type="leave-request" data-record-id="LR-2041">Leave request LR-2041</button>
+      <button data-page="/policies" data-module="Policies" data-title="HR policies">Policies</button>
+    </nav>
+    <main>
+      <div class="card">
+        <h1 id="page-title" style="margin-top: 0">My leave</h1>
+        <p class="muted">
+          This page stands in for an existing business application. The chat launcher (bottom right) is
+          the platform's embeddable widget. Switching pages calls <code>setContext()</code>, so the
+          assistant knows where you are.
+        </p>
+        <p class="muted">Context sent to the widget: <code id="context-preview"></code></p>
+      </div>
+      <div class="card">
+        <h2 style="margin-top: 0; font-size: 16px">Embedding snippet</h2>
+        <pre style="white-space: pre-wrap; font-size: 13px">&lt;script src="CHAT_URL/sdk/v1/chat-widget.js" async&gt;&lt;/script&gt;
+&lt;enterprise-chat app-id="hr-portal"&gt;&lt;/enterprise-chat&gt;</pre>
+      </div>
+    </main>
+
+    <enterprise-chat app-id="hr-portal"></enterprise-chat>
+
+    <script>
+      // Chat platform URL: Vite dev server by default, ?chat=http://localhost:8080 for the full compose stack.
+      const chatUrl = new URLSearchParams(location.search).get("chat") || "http://localhost:5173";
+      document.querySelector("pre").textContent = document
+        .querySelector("pre")
+        .textContent.replace("CHAT_URL", chatUrl);
+
+      const widget = document.querySelector("enterprise-chat");
+      widget.setAttribute("base-url", chatUrl);
+
+      function show(button) {
+        document.querySelectorAll("nav button").forEach((b) => b.removeAttribute("aria-current"));
+        button.setAttribute("aria-current", "page");
+        document.getElementById("page-title").textContent = button.dataset.title;
+        const context = { page: button.dataset.page, module: button.dataset.module, title: button.dataset.title };
+        if (button.dataset.recordType) {
+          context.record = { type: button.dataset.recordType, id: button.dataset.recordId };
+        }
+        document.getElementById("context-preview").textContent = JSON.stringify(context);
+        customElements.whenDefined("enterprise-chat").then(() => widget.setContext(context));
+      }
+      document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => show(b)));
+      show(document.querySelector("nav button"));
+
+      const script = document.createElement("script");
+      script.src = `${chatUrl}/sdk/v1/chat-widget.js`;
+      script.async = true;
+      document.head.append(script);
+    </script>
+  </body>
+</html>

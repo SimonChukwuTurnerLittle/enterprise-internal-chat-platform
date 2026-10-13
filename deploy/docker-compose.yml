@@ -1,0 +1,84 @@
+# Local development stack.
+#
+#   docker compose -f deploy/docker-compose.yml up -d                  # infrastructure only
+#   docker compose -f deploy/docker-compose.yml --profile app up -d --build   # + API and web
+#
+# Ports: web 8080 (profile app), Keycloak 8180, Postgres 5432, Redis 6379, demo host app 8081.
+name: enterprise-chat
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: chat
+      POSTGRES_PASSWORD: chat
+      POSTGRES_DB: chat
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chat"]
+      interval: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 20
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.5
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      # Browsers and tokens use localhost:8180; containers reach Keycloak at keycloak:8080.
+      KC_HOSTNAME: http://localhost:8180
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HTTP_PORT: "8080"
+    ports: ["8180:8080"]
+    volumes:
+      - ../infra/keycloak:/opt/keycloak/data/import:ro
+
+  # A stand-in "business application" page that embeds the chat widget.
+  demo-host:
+    image: nginx:alpine
+    ports: ["8081:80"]
+    volumes:
+      - ../sample-apps/demo-host:/usr/share/nginx/html:ro
+
+  api:
+    profiles: [app]
+    build: ../services/api
+    environment:
+      DATABASE_URL: postgresql+asyncpg://chat:chat@postgres:5432/chat
+      REDIS_URL: redis://redis:6379/0
+      PUBLIC_BASE_URL: http://localhost:8080
+      OIDC_ISSUER: http://localhost:8180/realms/enterprise
+      OIDC_INTERNAL_BASE_URL: http://keycloak:8080/realms/enterprise
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ORGANISATION_NAME: ${ORGANISATION_NAME:-Example Corp}
+    volumes:
+      - ../knowledge-seed:/seed:ro
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      keycloak: { condition: service_started }
+
+  web:
+    profiles: [app]
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    environment:
+      FRAME_ANCESTORS: http://localhost:8081
+    ports: ["8080:80"]
+    depends_on: [api]
+
+volumes:
+  pgdata:

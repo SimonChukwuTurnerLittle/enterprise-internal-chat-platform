@@ -1,0 +1,81 @@
+# Production stack for a self-hosted Coolify server ("Docker Compose" build pack).
+#
+# In Coolify:
+#   1. Create a resource from this repository, build pack "Docker Compose",
+#      compose file "deploy/docker-compose.coolify.yml".
+#   2. Assign your domain (e.g. https://chat.example.com) to the `web` service, port 80.
+#   3. Set the environment variables below in the Coolify UI (secrets never go in git).
+#   4. After the first deploy, load knowledge (from the api container's terminal):
+#        python -m app.cli seed --path /seed
+#      or upload documents in the Admin page.
+#
+# The identity provider (Microsoft Entra ID or a production Keycloak) is external.
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: chat
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: chat
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chat"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build: ../services/api
+    environment:
+      ENVIRONMENT: prod
+      LOG_JSON: "true"
+      DATABASE_URL: postgresql+asyncpg://chat:${POSTGRES_PASSWORD}@postgres:5432/chat
+      REDIS_URL: redis://redis:6379/0
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?e.g. https://chat.example.com}
+      SESSION_COOKIE_SECURE: "true"
+      OIDC_ISSUER: ${OIDC_ISSUER:?e.g. https://login.microsoftonline.com/<tenant-id>/v2.0}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:?}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE:?}
+      OIDC_SCOPES: ${OIDC_SCOPES:-openid profile email offline_access}
+      OIDC_ROLES_CLAIM: ${OIDC_ROLES_CLAIM:-roles}
+      ADMIN_ROLE: ${ADMIN_ROLE:-chat-admin}
+      LLM_PROVIDER: ${LLM_PROVIDER:-azure_openai}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4.1-mini}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_OPENAI_CHAT_DEPLOYMENT: ${AZURE_OPENAI_CHAT_DEPLOYMENT:-}
+      AZURE_OPENAI_EMBEDDING_DEPLOYMENT: ${AZURE_OPENAI_EMBEDDING_DEPLOYMENT:-}
+      ORGANISATION_NAME: ${ORGANISATION_NAME:-your organisation}
+    volumes:
+      - ../knowledge-seed:/seed:ro
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    environment:
+      FRAME_ANCESTORS: ${FRAME_ANCESTORS:-}
+    depends_on: [api]
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:

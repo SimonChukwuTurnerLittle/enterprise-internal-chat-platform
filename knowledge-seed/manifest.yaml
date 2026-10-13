@@ -1,0 +1,38 @@
+# Sample data for development and demos. All content is fictional ("Example Corp").
+# Load with:  uv run python -m app.cli seed --path ../../knowledge-seed
+
+applications:
+  - id: hr-portal
+    name: HR Portal
+    description: Leave, absence and HR policies.
+    allowed_origins: ["http://localhost:8081"]
+  - id: it-helpdesk
+    name: IT Helpdesk
+    description: IT troubleshooting, accounts and equipment.
+    allowed_origins: ["http://localhost:8081"]
+
+sources:
+  - slug: hr-policies
+    name: HR policies
+    application_id: hr-portal
+    acl_roles: []            # every employee
+    documents:
+      - file: hr/annual-leave-policy.md
+      - file: hr/sickness-absence-policy.md
+      - file: hr/remote-working-policy.md
+
+  - slug: hr-manager-guidance
+    name: HR guidance for managers
+    application_id: hr-portal
+    acl_roles: [manager, hr] # restricted: shows the ACL filter at work
+    documents:
+      - file: hr-managers/salary-bands.md
+
+  - slug: it-knowledge-base
+    name: IT knowledge base
+    application_id: it-helpdesk
+    acl_roles: []
+    documents:
+      - file: it/vpn-troubleshooting.md
+      - file: it/password-reset.md
+      - file: it/laptop-requests.md

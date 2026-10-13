@@ -1,0 +1,17 @@
+{
+  "name": "enterprise-chat-platform",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run build -w @ecp/widget-sdk && npm run dev -w @ecp/web",
+    "build": "npm run build -w @ecp/widget-sdk && npm run build -w @ecp/web",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

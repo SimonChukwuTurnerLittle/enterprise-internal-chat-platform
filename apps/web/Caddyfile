@@ -1,0 +1,42 @@
+{
+	admin off
+}
+
+# Serves the SPA and the widget script, and proxies /api to the FastAPI service, so the
+# browser sees one origin (session cookie stays first-party, no CORS needed).
+#
+# Env:
+#   API_UPSTREAM     host:port of the API (default api:8000)
+#   FRAME_ANCESTORS  space-separated host-app origins allowed to embed /embed,
+#                    e.g. "https://hr.example.com https://finance.example.com"
+:80 {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	handle /api/* {
+		reverse_proxy {$API_UPSTREAM:api:8000} {
+			# Stream Server-Sent Events immediately
+			flush_interval -1
+		}
+	}
+
+	@embed path /embed /embed/*
+	header @embed Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'self' {$FRAME_ANCESTORS}"
+
+	@app not path /embed /embed/* /api/* /sdk/*
+	header @app Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'self'"
+
+	header /sdk/* Cache-Control "public, max-age=300"
+	header /assets/* Cache-Control "public, max-age=31536000, immutable"
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

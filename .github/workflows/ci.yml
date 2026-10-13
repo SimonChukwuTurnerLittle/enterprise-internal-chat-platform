@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/api
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: chat
+          POSTGRES_PASSWORD: chat
+          POSTGRES_DB: chat_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U chat"
+          --health-interval 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run mypy app
+      - run: uv run pytest -q
+        env:
+          TEST_DATABASE_URL: postgresql+asyncpg://chat:chat@localhost:5432/chat_test
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w @ecp/widget-sdk
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build -w @ecp/web
+
+  images:
+    runs-on: ubuntu-latest
+    needs: [api, web]
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t enterprise-chat-api services/api
+      - run: docker build -t enterprise-chat-web -f apps/web/Dockerfile .
